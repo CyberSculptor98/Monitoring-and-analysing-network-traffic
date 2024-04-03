@@ -1,0 +1,61 @@
+import socket
+import struct
+
+def main():
+    # Öffnen eines Raw-Sockets, um den gesamten Netzwerkverkehr zu erfassen
+    conn = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
+
+    try:
+        while True:
+            # Erfassen eines Pakets
+            raw_data, addr = conn.recvfrom(65535)
+            
+            # Ausgabe der Header-Informationen
+            eth_header = parse_ethernet_header(raw_data[:14])
+            print("Ethernet Frame:")
+            print(f"Destination: {eth_header['destination']}, Source: {eth_header['source']}, Protocol: {eth_header['protocol']}")
+
+            if eth_header['protocol'] == 'IPv4':
+                # Analysieren des IPv4-Headers
+                ipv4_header = parse_ipv4_header(raw_data[14:34])
+                print("IPv4 Header:")
+                print(f"Version: {ipv4_header['version']}, Header Length: {ipv4_header['header_length']}, TTL: {ipv4_header['ttl']}, Protocol: {ipv4_header['protocol']}")
+                print(f"Source IP: {ipv4_header['source_ip']}, Destination IP: {ipv4_header['destination_ip']}")
+                
+                if ipv4_header['protocol'] == 'TCP':
+                    # Analysieren des TCP-Headers
+                    tcp_header = parse_tcp_header(raw_data[34:54])
+                    print("TCP Header:")
+                    print(f"Source Port: {tcp_header['source_port']}, Destination Port: {tcp_header['destination_port']}")
+            
+            print("="*40)
+            
+    except KeyboardInterrupt:
+        print("Programm beendet.")
+        conn.close()
+
+def parse_ethernet_header(data):
+    # Ethernet-Header analysieren
+    destination, source, protocol = struct.unpack("! 6s 6s H", data)
+    return {'destination': format_mac_addr(destination), 'source': format_mac_addr(source), 'protocol': socket.htons(protocol)}
+
+def parse_ipv4_header(data):
+    # IPv4-Header analysieren
+    version_header_length = data[0]
+    version = version_header_length >> 4
+    header_length = (version_header_length & 15) * 4
+    ttl, protocol, source_ip, destination_ip = struct.unpack("! 8x B B 2x 4s 4s", data[:20])
+    return {'version': version, 'header_length': header_length, 'ttl': ttl, 'protocol': protocol, 'source_ip': socket.inet_ntoa(source_ip), 'destination_ip': socket.inet_ntoa(destination_ip)}
+
+def parse_tcp_header(data):
+    # TCP-Header analysieren
+    source_port, destination_port = struct.unpack("! H H", data[:4])
+    return {'source_port': source_port, 'destination_port': destination_port}
+
+def format_mac_addr(bytes_addr):
+    # MAC-Adresse formatieren
+    bytes_str = map('{:02x}'.format, bytes_addr)
+    return ':'.join(bytes_str).upper()
+
+if __name__ == "__main__":
+    main()
